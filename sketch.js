@@ -3,20 +3,16 @@ let recognition;
 let palabras = [];
 let historialTexto = [];
 let ultimaPalabraTiempo = 0;
-let tiempoPausaBucle = 2500; // 2.5 segundos para considerar pausa
-let haHablado = false;
-let fontMonospace; // Para la tipografía de máquina de escribir
-
-function preload() {
-  // Opcional: Si quieres usar una fuente específica de máquina de escribir cargada, descomenta y sube el archivo.
-  // Pero por defecto usaremos la fuente monospace del sistema que ya se parece.
-}
+let tiempoPausaBucle = 2500;
+let borrando = false;
+let opacidadGeneral = 255;
+let textoProcesado = ""; // Control para no repetir palabras en tiempo real
 
 function setup() {
   let canvas = createCanvas(windowWidth, windowHeight);
   canvas.parent('canvas-container');
 
-  // Inicializar Cámara Web (La que detecte Chrome por defecto)
+  // Inicializar Cámara Web
   video = createCapture(VIDEO);
   video.size(width, height);
   video.hide();
@@ -27,26 +23,37 @@ function setup() {
   if ('SpeechRecognition' in window) {
     recognition = new SpeechRecognition();
     recognition.continuous = true;
-    recognition.interimResults = true;
+    recognition.interimResults = true; // Permite captura instantánea en tiempo real
     recognition.lang = 'es-ES';
 
     recognition.onresult = (event) => {
       let current = event.resultIndex;
-      let transcript = event.results[current][0].transcript;
+      let transcript = event.results[current][0].transcript.toLowerCase();
 
-      // Actualizar tiempo cuando habla
+      // DETONANTE DE LIMPIEZA: Detecta "y pues si" o "y pues sí" en tiempo real
+      if (transcript.includes("y pues si") || transcript.includes("y pues sí")) {
+        activarDesvanecimiento();
+        return;
+      }
+
       ultimaPalabraTiempo = millis();
-      haHablado = true; // Flag para saber que ha empezado a hablar
 
-      if (event.results[current].isFinal) {
-        // Al terminar la frase, añadir al historial para la superposición
-        historialTexto.push(transcript);
-        
-        // Crear las palabras para la lluvia
-        let palabrasDeFrase = transcript.split(' ');
-        for (let pTexto of palabrasDeFrase) {
-          palabras.push(crearPalabra(pTexto));
+      // EXTRAER PALABRAS EN TIEMPO REAL (mientras se habla)
+      let palabrasActuales = transcript.trim().split(' ');
+      
+      // Compara lo que está diciendo ahora con lo que ya se dibujó para soltar solo las palabras NUEVAS
+      for (let i = 0; i < palabrasActuales.length; i++) {
+        let palabra = palabrasActuales[i];
+        if (palabra && !textoProcesado.includes(palabra + "_" + i)) {
+          palabras.push(crearGranoArena(palabra));
+          textoProcesado += palabra + "_" + i + " "; // Marcar como dibujada
+          historialTexto.push(palabra);
         }
+      }
+
+      // Al cerrar la frase completa, reiniciamos el rastreador temporal
+      if (event.results[current].isFinal) {
+        textoProcesado = "";
       }
     };
 
@@ -66,7 +73,7 @@ function setup() {
 function draw() {
   background(0);
 
-  // 1. Mostrar Video (La cámara vieja si está configurada en Chrome)
+  // 1. Mostrar Video (Cámara)
   push();
   translate(width, 0);
   scale(-1, 1);
@@ -77,74 +84,79 @@ function draw() {
   fill(0, 0, 0, 100);
   rect(0, 0, width, height);
 
-  // 2. Lógica de Pausas y Superposición al volver a hablar
-  // Si ha hablado antes y ha pasado el tiempo de pausa
-  if (haHablado && millis() - ultimaPalabraTiempo > tiempoPausaBucle && historialTexto.length > 0) {
-    
-    // Al hablar de nuevo (el micrófono detecta sonido, pero el reconocimiento aún procesa),
-    // esta lógica se activará una vez y luego el flag volverá a true con la nueva frase.
-    // Para simplificar, haremos que durante el silencio la masa de palabras aumente una vez.
-    
-    let frasePasada = random(historialTexto);
-    let palabrasDeFrase = frasePasada.split(' ');
-    for (let pTexto of palabrasDeFrase) {
-        // Palabras de pausas caen más rápido y son más opacas
-        let p = crearPalabra(pTexto);
-        p.vy = random(3, 7); // Caen más rápido
-        p.opacidad = 255; // Súper opacas para el colapso visual
-        p.tamano = random(50, 120); // Mucho más grandes
-        palabras.push(p);
-    }
-    
-    // Reiniciar flag para evitar bucles infinitos durante el silencio,
-    // se activará de nuevo cuando el reconocimiento detecte voz nueva.
-    haHablado = false; 
+  // 2. Lógica de Pausa Larga (Acumulación extra si hay silencio)
+  if (!borrando && millis() - ultimaPalabraTiempo > tiempoPausaBucle && historialTexto.length > 0) {
+    let palabraPasada = random(historialTexto);
+    let p = crearGranoArena(palabraPasada);
+    p.tamano = random(55, 95); // Palabras más grandes en la pausa
+    palabras.push(p);
+    ultimaPalabraTiempo = millis() - 1200; 
   }
 
-  // 3. Actualizar y Dibujar la Lluvia de Palabras
-  // Usar tipografía de máquina de escribir del sistema
+  // 3. Animación de Desvanecimiento ("y pues si")
+  if (borrando) {
+    opacidadGeneral -= 12;
+    if (opacidadGeneral <= 0) {
+      palabras = [];
+      historialTexto = [];
+      borrando = false;
+      opacidadGeneral = 255;
+      textoProcesado = "";
+    }
+  }
+
+  // 4. Dibujar y Simular Física de "Arena"
   textFont('Courier New', 'Courier', 'monospace');
   
-  for (let i = palabras.length - 1; i >= 0; i--) {
+  for (let i = 0; i < palabras.length; i++) {
     let p = palabras[i];
-    
-    // Movimiento (Lluvia)
-    p.y += p.vy;
 
-    // Estilo (Máquina de escribir, tamaño, grosor)
-    fill(255, p.opacidad);
+    // Aplicar Gravedad
+    if (p.cayendo) {
+      p.vy += p.gravedad;
+      p.y += p.vy;
+
+      // Apilamiento gradual en el suelo
+      let alturaSuelo = height - 25 - (i * 0.7); 
+      if (p.y >= alturaSuelo) {
+        p.y = alturaSuelo;
+        p.cayendo = false;
+      }
+    }
+
+    // Estilo y Renderizado
+    let opacidadFinal = borrando ? opacidadGeneral : p.opacidad;
+    fill(255, opacidadFinal);
     textSize(p.tamano);
     
-    // p5.js textStyle no afecta mucho a monospace, el grosor lo simularemos con grosor de trazo si es muy grande
-    if (p.tamano > 80) {
-        stroke(255, p.opacidad - 100);
-        strokeWeight(2);
+    if (p.tamano > 70) {
+      stroke(255, opacidadFinal - 80);
+      strokeWeight(2);
     } else {
-        noStroke();
+      noStroke();
     }
-    textStyle(BOLD); 
-    textAlign(CENTER, TOP);
     
+    textStyle(BOLD);
+    textAlign(CENTER, CENTER);
     text(p.texto, p.x, p.y);
-
-    // Opcional: Eliminar palabras que salen de la pantalla para rendimiento
-    if (p.y > height + 100) {
-        palabras.splice(i, 1);
-    }
   }
 }
 
-// Función auxiliar para crear objetos de palabra consistentes
-function crearPalabra(texto) {
-    return {
-        texto: texto,
-        x: random(width * 0.05, width * 0.95), // Repartidas por todo el ancho
-        y: random(-200, -50), // Aparecen arriba, fuera de pantalla
-        vy: random(1, 4), // Velocidad de caída
-        // Variación de tamaño y grosor
-        tamano: random(20, 70), 
-        opacidad: 200
-    };
+function crearGranoArena(texto) {
+  return {
+    texto: texto,
+    x: random(width * 0.1, width * 0.9),
+    y: random(-80, -20),
+    vy: random(2, 4),
+    gravedad: 0.35,
+    cayendo: true,
+    tamano: random(24, 60),
+    opacidad: random(210, 255)
+  };
+}
+
+function activarDesvanecimiento() {
+  borrando = true;
 }
 
 function windowResized() {
