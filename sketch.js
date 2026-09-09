@@ -60,7 +60,7 @@ function setup() {
 }
 
 function draw() {
-  (background(0);)
+  background(0);
 
   // Lógica de Pausa Larga
   if (!borrando && millis() - ultimaPalabraTiempo > tiempoPausaBucle && historialTexto.length > 0) {
