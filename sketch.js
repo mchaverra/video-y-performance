@@ -5,95 +5,91 @@ let ultimaPalabraTiempo = 0;
 let tiempoPausaBucle = 2500;
 let borrando = false;
 let opacidadGeneral = 255;
-let textoProcesado = "";
-let estadoMic = "Haz clic en el botón para activar";
+let estadoMic = "Micrófono Activo - Habla ahora...";
 
 function setup() {
-  let canvas = createCanvas(windowWidth, windowHeight);
-  canvas.parent('canvas-container');
+  createCanvas(windowWidth, windowHeight);
 
-  // Configurar Reconocimiento de Voz
-  window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  
-  if ('SpeechRecognition' in window) {
+  // Configuración directa de Web Speech API
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  if (SpeechRecognition) {
     recognition = new SpeechRecognition();
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = 'es-ES';
 
-    recognition.onstart = () => {
-      estadoMic = "Micrófono Activo - Escuchando...";
-    };
-
-    recognition.onerror = (event) => {
-      estadoMic = "Error de micrófono: " + event.error;
-    };
-
     recognition.onresult = (event) => {
-      let current = event.resultIndex;
-      let transcript = event.results[current][0].transcript.toLowerCase();
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        if (event.results[i].isFinal) {
+          let texto = event.results[i][0].transcript.toLowerCase().trim();
 
-      if (transcript.includes("y pues si") || transcript.includes("y pues sí")) {
-        activarDesvanecimiento();
-        return;
-      }
+          if (texto.includes("y pues si") || texto.includes("y pues sí")) {
+            activarDesvanecimiento();
+            return;
+          }
 
-      ultimaPalabraTiempo = millis();
-      let palabrasActuales = transcript.trim().split(' ');
-      
-      for (let i = 0; i < palabrasActuales.length; i++) {
-        let palabra = palabrasActuales[i];
-        if (palabra && !textoProcesado.includes(palabra + "_" + i)) {
-          palabras.push(crearGranoArena(palabra));
-          textoProcesado += palabra + "_" + i + " ";
-          historialTexto.push(palabra);
+          let nuevasPalabras = texto.split(/\s+/);
+          nuevasPalabras.forEach((p) => {
+            if (p.length > 0) {
+              palabras.push(crearGranoArena(p));
+              historialTexto.push(p);
+            }
+          });
+
+          ultimaPalabraTiempo = millis();
         }
       }
+    };
 
-      if (event.results[current].isFinal) {
-        textoProcesado = "";
-      }
+    recognition.onerror = (e) => {
+      estadoMic = "Error: " + e.error;
     };
 
     recognition.onend = () => {
-      try { recognition.start(); } catch(e) {}
+      try { recognition.start(); } catch (e) {}
     };
+
+    // Forzar inicio
+    try {
+      recognition.start();
+    } catch (e) {}
+  } else {
+    estadoMic = "Navegador no compatible";
   }
 
-  document.getElementById('start-btn').addEventListener('click', () => {
-    if (recognition) {
-      try {
-        recognition.start();
-      } catch(e) {
-        console.log(e);
-      }
-    }
-    document.getElementById('start-btn').style.display = 'none';
-  });
+  // Activar por botón si fue bloqueado
+  let btn = document.getElementById('start-btn');
+  if (btn) {
+    btn.addEventListener('click', () => {
+      try { recognition.start(); } catch (e) {}
+      btn.style.display = 'none';
+    });
+  }
 
   ultimaPalabraTiempo = millis();
 }
 
 function draw() {
-  clear(); // Transparente para OBS
+  clear(); // Fondo transparente para OBS
 
-  // Indicador visual de estado en la parte superior
+  // Indicador de estado
   noStroke();
   fill(255, 180);
   textSize(14);
   textAlign(LEFT, TOP);
   text(estadoMic, 20, 20);
 
-  // Lógica de Pausa Larga
+  // Lógica de Pausa Larga (Cae palabra del historial)
   if (!borrando && millis() - ultimaPalabraTiempo > tiempoPausaBucle && historialTexto.length > 0) {
     let palabraPasada = random(historialTexto);
     let p = crearGranoArena(palabraPasada);
     p.tamano = random(55, 95);
     palabras.push(p);
-    ultimaPalabraTiempo = millis() - 1200; 
+    ultimaPalabraTiempo = millis() - 1200;
   }
 
-  // Animación de Desvanecimiento ("y pues si")
+  // Desvanecimiento
   if (borrando) {
     opacidadGeneral -= 12;
     if (opacidadGeneral <= 0) {
@@ -101,13 +97,12 @@ function draw() {
       historialTexto = [];
       borrando = false;
       opacidadGeneral = 255;
-      textoProcesado = "";
     }
   }
 
-  // Dibujar palabras (Texto blanco con contorno negro para que resalte sobre tu cámara)
+  // Dibujar Palabras
   textFont('Courier New', 'Courier', 'monospace');
-  
+
   for (let i = 0; i < palabras.length; i++) {
     let p = palabras[i];
 
@@ -115,7 +110,7 @@ function draw() {
       p.vy += p.gravedad;
       p.y += p.vy;
 
-      let alturaSuelo = height - 25 - (i * 0.7); 
+      let alturaSuelo = height - 35 - (i * 0.5);
       if (p.y >= alturaSuelo) {
         p.y = alturaSuelo;
         p.cayendo = false;
@@ -123,8 +118,7 @@ function draw() {
     }
 
     let opacidadFinal = borrando ? opacidadGeneral : p.opacidad;
-    
-    // Borde negro grueso para que el texto sea legible sobre cualquier fondo o ropa
+
     stroke(0, opacidadFinal);
     strokeWeight(4);
     fill(255, opacidadFinal);
@@ -140,7 +134,7 @@ function crearGranoArena(texto) {
     texto: texto,
     x: random(width * 0.1, width * 0.9),
     y: random(-80, -20),
-    vy: random(2, 4),
+    vy: random(2, 5),
     gravedad: 0.35,
     cayendo: true,
     tamano: random(28, 65),
