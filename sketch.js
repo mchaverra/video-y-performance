@@ -87,7 +87,7 @@ function setup() {
 }
 
 function draw() {
-  clear(); // Limpia el canvas para fondo 100% transparente en OBS
+ background(0);
 
   // Estado discreto
   noStroke();
