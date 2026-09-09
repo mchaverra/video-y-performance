@@ -6,6 +6,7 @@ let tiempoPausaBucle = 2500;
 let borrando = false;
 let opacidadGeneral = 255;
 let textoProcesado = "";
+let estadoMic = "Haz clic en el botón para activar";
 
 function setup() {
   let canvas = createCanvas(windowWidth, windowHeight);
@@ -19,6 +20,14 @@ function setup() {
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = 'es-ES';
+
+    recognition.onstart = () => {
+      estadoMic = "Micrófono Activo - Escuchando...";
+    };
+
+    recognition.onerror = (event) => {
+      estadoMic = "Error de micrófono: " + event.error;
+    };
 
     recognition.onresult = (event) => {
       let current = event.resultIndex;
@@ -47,12 +56,18 @@ function setup() {
     };
 
     recognition.onend = () => {
-      recognition.start();
+      try { recognition.start(); } catch(e) {}
     };
   }
 
   document.getElementById('start-btn').addEventListener('click', () => {
-    if (recognition) recognition.start();
+    if (recognition) {
+      try {
+        recognition.start();
+      } catch(e) {
+        console.log(e);
+      }
+    }
     document.getElementById('start-btn').style.display = 'none';
   });
 
@@ -60,7 +75,14 @@ function setup() {
 }
 
 function draw() {
-  background(0);
+  clear(); // Transparente para OBS
+
+  // Indicador visual de estado en la parte superior
+  noStroke();
+  fill(255, 180);
+  textSize(14);
+  textAlign(LEFT, TOP);
+  text(estadoMic, 20, 20);
 
   // Lógica de Pausa Larga
   if (!borrando && millis() - ultimaPalabraTiempo > tiempoPausaBucle && historialTexto.length > 0) {
@@ -83,7 +105,7 @@ function draw() {
     }
   }
 
-  // Dibujar palabras (Texto blanco brillante)
+  // Dibujar palabras (Texto blanco con contorno negro para que resalte sobre tu cámara)
   textFont('Courier New', 'Courier', 'monospace');
   
   for (let i = 0; i < palabras.length; i++) {
@@ -101,16 +123,12 @@ function draw() {
     }
 
     let opacidadFinal = borrando ? opacidadGeneral : p.opacidad;
+    
+    // Borde negro grueso para que el texto sea legible sobre cualquier fondo o ropa
+    stroke(0, opacidadFinal);
+    strokeWeight(4);
     fill(255, opacidadFinal);
     textSize(p.tamano);
-    
-    if (p.tamano > 70) {
-      stroke(255, opacidadFinal - 80);
-      strokeWeight(2);
-    } else {
-      noStroke();
-    }
-    
     textStyle(BOLD);
     textAlign(CENTER, CENTER);
     text(p.texto, p.x, p.y);
@@ -125,8 +143,8 @@ function crearGranoArena(texto) {
     vy: random(2, 4),
     gravedad: 0.35,
     cayendo: true,
-    tamano: random(24, 60),
-    opacidad: random(210, 255)
+    tamano: random(28, 65),
+    opacidad: random(220, 255)
   };
 }
 
