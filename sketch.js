@@ -60,7 +60,7 @@ function setup() {
 }
 
 function draw() {
-  clear(); // Fondo totalmente transparente para OBS
+  (background(0);)
 
   // Lógica de Pausa Larga
   if (!borrando && millis() - ultimaPalabraTiempo > tiempoPausaBucle && historialTexto.length > 0) {
