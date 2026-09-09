@@ -2,56 +2,53 @@ let recognition;
 let palabras = [];
 let historialTexto = [];
 let ultimaPalabraTiempo = 0;
-let tiempoPausaBucle = 2000;
 let borrando = false;
 let opacidadGeneral = 255;
 let estadoMic = "Haz clic en 'Iniciar Performance'";
+let palabrasProcesadasGlobal = 0;
 
 function setup() {
   let canvas = createCanvas(windowWidth, windowHeight);
   canvas.parent('canvas-container');
 
-  // Configurar Reconocimiento de Voz
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
   if (SpeechRecognition) {
     recognition = new SpeechRecognition();
     recognition.continuous = true;
-    recognition.interimResults = true;
+    recognition.interimResults = true; // Para capturar en tiempo real palabra por palabra
     recognition.lang = 'es-ES';
 
-    recognition.onstart = () => {
-      estadoMic = "Escuchando...";
-    };
+    recognition.onstart = () => { estadoMic = "Escuchando en vivo..."; };
 
     recognition.onresult = (event) => {
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        let transcript = event.results[i][0].transcript.toLowerCase().trim();
+      let transcripcionCompleta = "";
+      for (let i = 0; i < event.results.length; i++) {
+        transcripcionCompleta += event.results[i][0].transcript.toLowerCase() + " ";
+      }
 
-        // 1. Detección de comando de borrado
-        if (transcript.includes("y pues si") || transcript.includes("y pues sí")) {
-          activarDesvanecimiento();
-          return;
-        }
+      // Comando de purga
+      if (transcripcionCompleta.includes("y pues si") || transcripcionCompleta.includes("y pues sí")) {
+        activarDesvanecimiento();
+        return;
+      }
 
-        // 2. Procesar palabras cuando el resultado es final (frase clara)
-        if (event.results[i].isFinal) {
-          let nuevasPalabras = transcript.split(/\s+/);
-          nuevasPalabras.forEach((p) => {
-            if (p.length > 0) {
-              // Tamaño variado drásticamente según longitud/énfasis de la palabra
-              let tamanoCalculado = constrain(p.length * 12 + random(20, 50), 30, 110);
-              palabras.push(crearGranoArena(p, tamanoCalculado));
-              historialTexto.push(p);
-            }
-          });
+      let listaPalabras = transcripcionCompleta.trim().split(/\s+/);
+
+      // Flujo continuo: Suelta la palabra tan pronto como la voz la pronuncia
+      while (palabrasProcesadasGlobal < listaPalabras.length) {
+        let p = listaPalabras[palabrasProcesadasGlobal];
+        if (p && p.length > 0) {
+          let tamanoCalculado = constrain(p.length * 10 + random(25, 55), 35, 105);
+          palabras.push(crearGranoArena(p, tamanoCalculado));
+          historialTexto.push(p);
           ultimaPalabraTiempo = millis();
-        } 
-        // 3. Murmullos o palabras no entendidas/intermedias -> Generar balbuceos sin sentido
-        else if (transcript.length > 2 && random() < 0.15) {
-          let balbuceo = generarBalbuceo(random(2, 6));
-          palabras.push(crearGranoArena(balbuceo, random(18, 35))); // Tamaño más pequeñito para balbuceos
         }
+        palabrasProcesadasGlobal++;
+      }
+
+      if (event.results[event.results.length - 1].isFinal) {
+        palabrasProcesadasGlobal = 0;
       }
     };
 
@@ -64,22 +61,20 @@ function setup() {
     };
 
     recognition.onend = () => {
+      palabrasProcesadasGlobal = 0;
       try { recognition.start(); } catch (e) {}
     };
   }
 
-  // Evento Botón Inicio
+  // Eventos UI
   let startBtn = document.getElementById('start-btn');
   if (startBtn) {
     startBtn.addEventListener('click', () => {
-      if (recognition) {
-        try { recognition.start(); } catch (e) {}
-      }
+      if (recognition) { try { recognition.start(); } catch (e) {} }
       startBtn.style.display = 'none';
     });
   }
 
-  // Evento Botón Pantalla Completa
   let fsBtn = document.getElementById('fullscreen-btn');
   if (fsBtn) {
     fsBtn.addEventListener('click', () => {
@@ -92,27 +87,27 @@ function setup() {
 }
 
 function draw() {
-  clear(); // Fondo transparente para OBS
+  clear(); // Limpia el canvas para fondo 100% transparente en OBS
 
-  // Indicador de estado en la esquina superior izquierda
+  // Estado discreto
   noStroke();
-  fill(255, 160);
+  fill(255, 180);
   textSize(14);
   textAlign(LEFT, TOP);
-  textStyle(NORMAL);
+  textFont('monospace');
   text(estadoMic, 20, 20);
 
-  // Lógica de Pausa Larga (Si te quedas en silencio, vuelven a caer palabras del historial o balbuceos)
-  if (!borrando && millis() - ultimaPalabraTiempo > tiempoPausaBucle && historialTexto.length > 0) {
-    let esBalbuceo = random() < 0.4;
-    let textoCaida = esBalbuceo ? generarBalbuceo(random(3, 7)) : random(historialTexto);
-    let tam = esBalbuceo ? random(20, 40) : random(60, 120);
+  // Pausa prolongada: Goteo continuo de palabras pasadas o balbuceos
+  if (!borrando && millis() - ultimaPalabraTiempo > 1800 && historialTexto.length > 0) {
+    let esBalbuceo = random() < 0.35;
+    let textoCaida = esBalbuceo ? generarBalbuceo(random(3, 6)) : random(historialTexto);
+    let tam = esBalbuceo ? random(22, 38) : random(50, 90);
     
     palabras.push(crearGranoArena(textoCaida, tam));
-    ultimaPalabraTiempo = millis() - 1000;
+    ultimaPalabraTiempo = millis() - 600; // Goteo constante uno a uno
   }
 
-  // Desvanecimiento ("y pues si")
+  // Desvanecimiento
   if (borrando) {
     opacidadGeneral -= 12;
     if (opacidadGeneral <= 0) {
@@ -120,21 +115,21 @@ function draw() {
       historialTexto = [];
       borrando = false;
       opacidadGeneral = 255;
+      palabrasProcesadasGlobal = 0;
     }
   }
 
-  // Configuración de la fuente manuscrita estilo libreta
+  // Estilo Manuscrito (Caveat)
   textFont('Caveat', 'cursive');
 
   for (let i = 0; i < palabras.length; i++) {
     let p = palabras[i];
 
-    // Caída con física de gravedad desde arriba de la pantalla
     if (p.cayendo) {
       p.vy += p.gravedad;
       p.y += p.vy;
 
-      let alturaSuelo = height - 40 - (i * 0.4);
+      let alturaSuelo = height - 45 - (i * 0.4);
       if (p.y >= alturaSuelo) {
         p.y = alturaSuelo;
         p.cayendo = false;
@@ -145,9 +140,8 @@ function draw() {
 
     push();
     translate(p.x, p.y);
-    rotate(p.rotacion); // Leve inclinación orgánica como escrita a mano
+    rotate(p.rotacion);
 
-    // Contorno grueso para lectura clara sobre video
     stroke(0, opacidadFinal);
     strokeWeight(p.tamano > 60 ? 5 : 3);
     fill(255, opacidadFinal);
@@ -161,30 +155,25 @@ function draw() {
 function crearGranoArena(texto, tamano) {
   return {
     texto: texto,
-    x: random(width * 0.1, width * 0.9),
-    y: random(-120, -40), // Empieza arriba fuera de la pantalla
-    vy: random(2, 6),
-    gravedad: 0.4,
+    x: random(width * 0.12, width * 0.88),
+    y: random(-100, -30),
+    vy: random(2, 5),
+    gravedad: 0.38,
     cayendo: true,
-    tamano: tamano || random(30, 75),
+    tamano: tamano || random(30, 70),
     opacidad: random(220, 255),
-    rotacion: random(-0.15, 0.15) // Rotación manuscrita orgánica
+    rotacion: random(-0.12, 0.12)
   };
 }
 
-// Generador de palabras inventadas / balbuceos sin sentido
 function generarBalbuceo(longitud) {
   const caracteres = "bcdfghjklmnpqrstvwxyz";
   const vocales = "aeiou";
-  let resultado = "";
+  let res = "";
   for (let i = 0; i < longitud; i++) {
-    if (i % 2 === 0) {
-      resultado += caracteres.charAt(Math.floor(Math.random() * caracteres.length));
-    } else {
-      resultado += vocales.charAt(Math.floor(Math.random() * vocales.length));
-    }
+    res += (i % 2 === 0) ? caracteres.charAt(Math.floor(Math.random() * caracteres.length)) : vocales.charAt(Math.floor(Math.random() * vocales.length));
   }
-  return resultado;
+  return res;
 }
 
 function activarDesvanecimiento() {
